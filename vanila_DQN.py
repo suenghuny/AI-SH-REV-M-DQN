@@ -498,9 +498,7 @@ class Agent:
         self.n_cos = n_cos
         self.GNN = GNN#
         # 추가추가
-        self.gamma_n_step = torch.tensor(
-            [[self.gamma ** i for i in range(self.n_step + 1)] for _ in range(self.batch_size)], dtype=torch.float,
-            device=device)
+        self.gamma_n_step = torch.tensor([[self.gamma ** i for i in range(self.n_step + 1)] for _ in range(self.batch_size)], dtype=torch.float, device=device)
 
         self.node_representation_ship_feature = NodeEmbedding(feature_size=feature_size_ship,
                                                               n_representation_obs=n_representation_ship,
@@ -687,6 +685,7 @@ class Agent:
                 Q_tar = self.Q_tar(obs_n_action_flat)
 
                 Q_tar = Q_tar.view(obs_n_action.size(0), self.action_size)
+                print(Q_tar.shape)
                 action_max = Q_tar.max(dim=1)[1].long().unsqueeze(1)
                 Q_tar_max = torch.gather(Q_tar, 1, action_max)
                 return Q_tar_max

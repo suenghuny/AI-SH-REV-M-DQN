@@ -11,7 +11,7 @@ def get_cfg():
     parser.add_argument("--per_alpha", type=float, default=0.5, help="PER_alpha")
     parser.add_argument("--per_beta", type=float, default=0.6, help="PER_beta")
     parser.add_argument("--sigma_init", type=float, default=1, help="sigma_init")
-    parser.add_argument("--n_step", type=int, default=5, help="n_step")
+    parser.add_argument("--n_step", type=int, default=1, help="n_step")
     parser.add_argument("--anneal_episode", type=int, default=1500, help="episode")
     parser.add_argument("--vdn", type=bool, default=True, help="vdn")
     parser.add_argument("--map_name", type=str, default='6h_vs_8z', help="map name")
