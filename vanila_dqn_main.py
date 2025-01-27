@@ -3,7 +3,7 @@ from Components.Adapter_Component import *
 from Components.Policy import *
 from collections import deque
 from cfg import get_cfg
-from DQN import Agent
+from vanila_DQN import Agent
 import numpy as np
 
 fix_l = 0
@@ -79,8 +79,8 @@ def train(agent, env, e, t, train_start, epsilon, min_epsilon, anneal_step, init
             edge_index_ship_to_sam = env.get_ship_to_sam_edge_index()
             edge_index_ship_to_enemy = env.get_ship_to_enemy_edge_index()
             heterogeneous_edges = (
-            edge_index_ssm_to_ship, edge_index_ssm_to_ssm, edge_index_sam_to_ssm, edge_index_ship_to_sam,
-            edge_index_ship_to_enemy)
+                edge_index_ssm_to_ship, edge_index_ssm_to_ssm, edge_index_sam_to_ssm, edge_index_ship_to_sam,
+                edge_index_ship_to_enemy)
 
             ship_feature = env.get_ship_feature()
             missile_node_feature, node_cats = env.get_missile_node_feature()
@@ -240,8 +240,8 @@ def evaluation(agent, env, with_noise=False):
             edge_index_ship_to_sam = env.get_ship_to_sam_edge_index()
             edge_index_ship_to_enemy = env.get_ship_to_enemy_edge_index()
             heterogeneous_edges = (
-            edge_index_ssm_to_ship, edge_index_ssm_to_ssm, edge_index_sam_to_ssm, edge_index_ship_to_sam,
-            edge_index_ship_to_enemy)
+                edge_index_ssm_to_ship, edge_index_ssm_to_ssm, edge_index_sam_to_ssm, edge_index_ship_to_sam,
+                edge_index_ship_to_enemy)
 
             ship_feature = env.get_ship_feature()
             missile_node_feature, node_cats = env.get_missile_node_feature()
@@ -346,9 +346,8 @@ if __name__ == "__main__":
                   feature_size_enemy=env.get_env_info()["enemy_feature_shape"],
                   feature_size_missile=env.get_env_info()["missile_feature_shape"],
                   feature_size_action=env.get_env_info()["action_feature_shape"],
-
-                  iqn_layers=list(eval(cfg.iqn_layers)),
-
+                  iqn_layers=list(eval(cfg.ppo_layers)),
+                  layers=list(eval(cfg.ppo_layers)),
 
                   node_embedding_layers_ship=list(eval(cfg.ship_layers)),
                   node_embedding_layers_missile=list(eval(cfg.missile_layers)),

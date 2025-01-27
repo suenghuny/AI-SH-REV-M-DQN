@@ -546,6 +546,7 @@ class Agent:
         return action_blue, prob_a, mask, a_index
 
     def learn(self, cum_loss = 0):
+
         if cfg.algorithm == 'actor_critic':
             for l in range(len(self.batch_store)):
                 batch_data = self.batch_store[l]
@@ -581,6 +582,7 @@ class Agent:
                 obs_n_act = torch.cat([obs_expand, act_graph], dim= 2)
                 logit = torch.stack([self.network.pi(obs_n_act[:, i]) for i in range(self.action_size)])
                 logit = torch.einsum('ijk->jik', logit).squeeze(2)
+
                 mask = mask.squeeze(1)
                 logit = logit.masked_fill(mask == 0, -1e8)
                 pi = torch.softmax(logit, dim=-1)
@@ -596,19 +598,84 @@ class Agent:
                     cum_loss = loss/cfg.n_data_parallelism
                 else:
                     cum_loss = cum_loss+loss/cfg.n_data_parallelism
+
             if type(self.optimizer) == AdaHessian:
                 cum_loss.backward(create_graph=True)
             else:
                 cum_loss.backward()
+
             torch.nn.utils.clip_grad_norm_(self.eval_params, cfg.grad_clip)
             self.optimizer.step()
             self.optimizer.zero_grad()
+
             if self.optimizer.param_groups[0]['lr'] >= cfg.lr_min:
                 self.scheduler.step()
+
+        if cfg.algorithm == 'kl_penalty':
+            ship_feature, \
+            ship_feature_next, \
+            missile_node_feature, \
+            heterogeneous_edges, \
+            action_feature, \
+            action_blue, \
+            reward, \
+            prob, \
+            _, \
+            done, \
+            avail_action_blue, \
+            a_index = self.make_batch()
+            avg_loss = 0.0
+            a_indices = a_index.unsqueeze(1)
+            self.eval_check(eval=False)
+
+            self.adaptive_beta = 1.7
+            self.kl_target =cfg.kl_target
+            for i in range(self.K_epoch):
+                obs, act_graph = self.get_node_representation(ship_feature,missile_node_feature,heterogeneous_edges,mini_batch=True)
+                obs_next = self.get_ship_representation(ship_feature_next)
+                v_s = self.network.v(obs)
+                td_target = reward.unsqueeze(1) + self.gamma * self.network.v(obs_next) * (1-done).unsqueeze(1)
+                delta = td_target - v_s
+                delta = delta.cpu().detach().numpy()
+                advantage_lst = []
+                advantage = 0.0
+                for delta_t in delta[ : :-1]:
+                    advantage = self.gamma * self.lmbda * advantage + delta_t[0]
+                    advantage_lst.append([advantage])
+                advantage_lst.reverse()
+                advantage = torch.tensor(advantage_lst, dtype=torch.float).to(device)
+                mask = avail_action_blue
+                obs_expand = obs.unsqueeze(1).expand([obs.shape[0], act_graph.shape[1], obs.shape[1]])
+                obs_n_act = torch.cat([obs_expand, act_graph], dim= 2)
+                logit = torch.stack([self.network.pi(obs_n_act[:, i]) for i in range(self.action_size)])
+                logit = torch.einsum('ijk->jik', logit).squeeze(2)
+                mask = mask.squeeze(1)
+                logit = logit.masked_fill(mask == 0, -1e8)
+                pi = torch.softmax(logit, dim=-1)
+                pi_a = pi.gather(1, a_indices)
+                ratio = torch.exp(torch.log(pi_a.squeeze(1)) - torch.log(prob).detach())  # a/b == exp(log(a)-log(b))
+                kl_penalty = torch.log(prob).detach()*(torch.log(prob).detach() - torch.log(pi_a.squeeze(1)))
+                surr1 = ratio * (advantage.detach().squeeze())
+                surr = surr1 - self.adaptive_beta * kl_penalty
+                if cfg.entropy == True:
+                    entropy = -torch.sum(torch.exp(pi) * pi, dim=1)
+                    loss = - surr.mean() + 0.5 * F.smooth_l1_loss(v_s, td_target.detach()) -0.01*entropy.mean()# 수정 + 엔트로피
+                else:
+                    loss = - surr.mean() + 0.5 * F.smooth_l1_loss(v_s, td_target.detach())
+                self.optimizer.zero_grad()
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.eval_params, cfg.grad_clip)
+                self.optimizer.step()
+                self.scheduler.step()
+                if kl_penalty.mean() < self.kl_target/1.5:
+                    self.adaptive_beta = self.adaptive_beta/0.5
+                if kl_penalty.mean() > self.kl_target*1.5:
+                    self.adaptive_beta = self.adaptive_beta*0.5
 
         if cfg.algorithm == 'ppo':
             if self.eps_clip >= cfg.eps_clip_min:
                 self.eps_clip -=cfg.eps_clip_step
+
             for i in range(self.K_epoch):
                 for l in range(len(self.batch_store)):
                     batch_data = self.batch_store[l]
@@ -648,9 +715,6 @@ class Agent:
                     for a in range(self.action_size):
                         logit_empty[:, a] =self.network.pi(obs_n_act[:, a]).squeeze(1)
                     logit = logit_empty
-                    # logit = torch.stack([self.network.pi(obs_n_act[:, i]) for i in range(self.action_size)])
-                    # logit = torch.einsum('ijk->jik', logit).squeeze(2)
-                    # print("dkdkd", obs_n_act.shape, logit.shape, logit_empty.shape)
                     mask = mask.squeeze(1)
                     logit = logit.masked_fill(mask == 0, -1e8)
                     pi = torch.softmax(logit, dim=-1)

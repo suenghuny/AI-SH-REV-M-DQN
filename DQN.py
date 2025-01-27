@@ -138,6 +138,7 @@ class DuelingDQN(nn.Module):
     def forward(self, V, A, mask, past_action = None, training = False):
         # v의 shape : batch_size x 1
         # a의 shape : batch_size x action size
+
         if (past_action == None) and (training == False):
             A = A.masked_fill(mask == 0,float('-inf'))
             zeros = torch.zeros_like(A)
@@ -148,7 +149,6 @@ class DuelingDQN(nn.Module):
             Q = V+A-mean_A
 
         if (past_action != None) and (training == True):
-            #print(A.shape, mask.shape)
 
             mask = mask.squeeze(1)
             A = A.masked_fill(mask == 0, float('-inf'))
@@ -676,17 +676,21 @@ class Agent:
     def eval_check(self, eval):
         if eval == True:
             self.DuelingQ.eval()
+            self.DuelingQtar.eval()
+
             self.node_representation_ship_feature.eval()
+            self.node_representation_ship_feature_tar.eval()
+
+            self.node_embedding.eval()
+            self.node_embedding_tar.eval()
 
             self.Q.eval()
             self.Q_tar.eval()
-
         else:
             self.DuelingQ.train()
             self.node_representation_ship_feature.train()
-
+            self.node_embedding.train()
             self.Q.train()
-            self.Q_tar.train()
 
     def load_model(self, path):
         checkpoint = torch.load(path)
@@ -814,6 +818,7 @@ class Agent:
                 Q_tar = self.DuelingQtar(V_tar,
                                          A_tar,
                                          mask, past_action=None, training=True)
+
                 action_max = Q.max(dim = 1)[1].long().unsqueeze(1)
                 Q_tar_max = torch.gather(Q_tar, 1, action_max)
                 return Q_tar_max
@@ -935,34 +940,12 @@ class Agent:
         delta = (td_target - q_tot).detach().tolist()
         self.buffer.update_transition_priority(batch_index = batch_index, delta = delta)
         loss = F.huber_loss(weight * q_tot, weight * td_target)
-        del node_features_missile, \
-            ship_features, \
-            edge_indices_missile, \
-            actions, \
-            rewards, \
-            dones, \
-            node_features_missile_next, \
-            ship_features_next, \
-            edge_indices_missile_next, \
-            avail_actions, \
-            avail_actions_next, \
-            status, \
-            status_next, \
-            priority, \
-            batch_index, \
-            p_sampled, action_feature, action_features, action_features_next, heterogenous_edges, heterogenous_edges_next, \
-            action_index,cos, taus, q_tot, q_tot_tar, rewards_1_step, rewards_k_step,masked_n_step_bootstrapping, discounted_n_step_bootstrapping, td_target
-
-        gc.collect()
-        torch.cuda.empty_cache()
-
         self.optimizer.zero_grad()
         if type(self.optimizer) == AdaHessian:
             loss.backward(create_graph=True)
         else:
             loss.backward()
-        gc.collect()
-        torch.cuda.empty_cache()
+
         torch.nn.utils.clip_grad_norm_(self.eval_params, cfg.grad_clip)
 
         self.optimizer.step()
@@ -971,4 +954,9 @@ class Agent:
         for target_param, local_param in zip(self.Q_tar.parameters(), self.Q.parameters()):
             target_param.data.copy_(tau * local_param.data + (1 - tau) * target_param.data)
         for target_param, local_param in zip(self.DuelingQtar.parameters(), self.DuelingQ.parameters()):
+            target_param.data.copy_(tau * local_param.data + (1 - tau) * target_param.data)
+
+        for target_param, local_param in zip(self.node_embedding_tar.parameters(), self.node_embedding.parameters()):
+            target_param.data.copy_(tau * local_param.data + (1 - tau) * target_param.data)
+        for target_param, local_param in zip(self.node_representation_ship_feature_tar.parameters(), self.node_representation_ship_feature.parameters()):
             target_param.data.copy_(tau * local_param.data + (1 - tau) * target_param.data)
