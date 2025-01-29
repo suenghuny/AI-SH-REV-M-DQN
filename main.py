@@ -5,6 +5,7 @@ from collections import deque
 from cfg import get_cfg
 from DQN import Agent
 import numpy as np
+from torch.utils.tensorboard import SummaryWriter
 
 fix_l = 0
 fix_u = 17
@@ -143,10 +144,7 @@ def train(agent, env, e, t, train_start, epsilon, min_epsilon, anneal_step, init
                 if agent.beta <= 1:
                     agent.beta -= anneal_step
                 agent.eval_check(eval=False)
-                if e <= cfg.embedding_train_stop:
-                    agent.learn()
-                else:
-                    epsilon = 0
+                agent.learn()
         else:
             pass_transition = True
             env.step(action_blue=[0, 0, 0, 0, 0, 0, 0, 0], action_yellow=enemy_action_for_transition,
@@ -284,6 +282,7 @@ if __name__ == "__main__":
         from torch.utils.tensorboard import SummaryWriter
 
         output_dir = "../output_susceptibility/"
+
         writer = SummaryWriter('./logs2')
         import os
 
@@ -431,7 +430,12 @@ if __name__ == "__main__":
             if vessl_on == True:
                 vessl.log(step=e, payload={'eval_leakers': leakers_rate})
                 vessl.log(step=e, payload={'eval_non_lose_rate': non_lose_rate})
+
+
             else:
+                writer.add_scalar('eval_leakers', leakers_rate, e)
+                writer.add_scalar('eval_non_lose_rate', non_lose_rate, e)
+
                 eval_win_ratio.append(leakers_rate)
                 eval_lose_ratio.append(non_lose_rate)
 
@@ -461,10 +465,11 @@ if __name__ == "__main__":
                 vessl.log(step=e, payload={'lose': 0})
                 lose_ratio.append(0)
         else:
+            writer.add_scalar('cumulative_reward', episode_reward, e)
             if win_tag == 'lose':
-                lose_ratio.append(-1)
+                writer.add_scalar('non lose ratio', -1, e)
             else:
-                lose_ratio.append(0)
+                writer.add_scalar('non lose ratio', 0, e)
         if e % 10 == 0:
             import os
             import pandas as pd
